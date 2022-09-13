@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - "master"
+    paths:
+      - "angular/**"
+      - ".github/**"
+      - "Dockerfile"
   workflow_dispatch:
 
 jobs:

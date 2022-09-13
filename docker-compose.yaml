@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+  angular-starter:
+    image: ghcr.io/usaldudo/angular-react-starter:latest
+    container_name: web
+    ports:
+    - 8080:8080
