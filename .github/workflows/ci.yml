@@ -39,7 +39,7 @@ jobs:
         cache-dependency-path: './angular/package-lock.json'
     - run: npm ci
       working-directory: ./angular
-    - run: ng build
+    - run: npm run build
       working-directory: ./angular
 
     - name: Login to GCR
@@ -103,6 +103,7 @@ jobs:
         password: ${{ secrets.MAIL_PASSWORD }}
         to: ${{ secrets.MAIL_TO }}
         from: ${{ secrets.MAIL_FROM }}
-        subject: ${{ github.job }} job of ${{ github.repository }} has ${{ job.status }}
+        subject: ${{ github.run_number }} of ${{ github.repository }}
         body: |
-          ${{ github.job }} job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ job.status }}.
+          tests job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ needs.tests.result }}.
+          build job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ needs.build.result }}.
