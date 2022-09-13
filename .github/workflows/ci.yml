@@ -1,0 +1,108 @@
+name: Test task
+
+on:
+  push:
+    branches:
+      - "master"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ./angular
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 14
+        cache: 'npm'
+        cache-dependency-path: './angular/package-lock.json'
+    - run: npm ci
+    - run: npm test -- --watch=false --browsers=ChromeHeadless
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: tests
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 14
+        cache: 'npm'
+        cache-dependency-path: './angular/package-lock.json'
+    - run: npm ci
+      working-directory: ./angular
+    - run: ng build
+      working-directory: ./angular
+
+    - name: Login to GCR
+      uses: docker/login-action@v1
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        tags: |
+          type=edge
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=sha
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Upload Dockerfile as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: dockerfile-artifact
+        path: Dockerfile
+        retention-days: 1
+
+    - name: Download artifact from previous workflow
+      uses: actions/download-artifact@v3
+      with:
+        name: dockerfile-artifact
+        path: /tmp
+
+    - name: Build and push image
+      uses: docker/build-push-action@v3
+      id: buildx
+      with:
+        context: ./angular
+        file: /tmp/Dockerfile
+        builder: ${{ steps.buildx.outputs.name }}
+        push: true
+        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
+  mail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ always() }}
+    needs: [tests, build]
+    steps:
+    - name: Send mail
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_port: 465
+        server_address: ${{ secrets.MAIL_SERVER }}
+        username: ${{ secrets.MAIL_USERNAME }}
+        password: ${{ secrets.MAIL_PASSWORD }}
+        to: ${{ secrets.MAIL_TO }}
+        from: ${{ secrets.MAIL_FROM }}
+        subject: ${{ github.job }} job of ${{ github.repository }} has ${{ job.status }}
+        body: |
+          ${{ github.job }} job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ job.status }}.
