@@ -13,7 +13,11 @@ jobs:
     defaults:
       run:
         working-directory: ./angular
+    outputs:
+      pipeline_start: ${{ steps.start.outputs.start }}
     steps:
+    - run: echo "::set-output name=start::$(date +%s)"
+      id: start
     - uses: actions/checkout@v3
     - uses: actions/setup-node@v3
       with:
@@ -83,8 +87,8 @@ jobs:
         file: /tmp/Dockerfile
         builder: ${{ steps.buildx.outputs.name }}
         push: true
-        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
 
@@ -94,6 +98,12 @@ jobs:
     if: ${{ always() }}
     needs: [tests, build]
     steps:
+    - name: Pipeline duration
+      id: duration
+      run: |
+        duration=$(( $(date +%s) - ${{ needs.tests.outputs.pipeline_start }} ))
+        echo "::set-output name=readble::$(date -d@$duration -u +%M) min $(date -d@$duration -u +%S) sec"
+
     - name: Send mail
       uses: dawidd6/action-send-mail@v3
       with:
@@ -107,3 +117,4 @@ jobs:
         body: |
           tests job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ needs.tests.result }}.
           build job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ needs.build.result }}.
+          Executed in ${{ steps.duration.outputs.readble }}
